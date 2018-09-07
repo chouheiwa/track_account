@@ -154,8 +154,14 @@ void track_account_plugin::monitor_signed_block(const graphene::chain::signed_bl
                 const auto&account = accounts_by_name.find(*itr);
                 
                 if (account != accounts_by_name.end()) {
-                    ilog("Track account:${account}",("account",*account));
-                    track_account_and_write_to_file(*account,blk.timestamp);
+                    ilog("Track account:${account}",("account",(*account).name));
+                    try {
+                        track_account_and_write_to_file(*account,blk.timestamp);
+                    } catch (...) {
+                        elog("Error during track accout:${account}",("account",(*account).name));
+                    }
+                    
+                    
                 }else {
                     elog("Track account:${account} not found!!!",("account",*itr));
                 }
