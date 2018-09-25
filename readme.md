@@ -72,3 +72,13 @@ track-all-relationship = false
 最后是标准启动节点程序,程序运行完成后，相关文件会在执行见证节点目录下生成
 
 Finaly is to run noral start,target file will be at the run path
+
+## 其余相关说明
+
+这个插件在文件生成结束后会自动停止见证节点（如果节点较大，启动时间可能耗时较长）
+
+目前存在问题:
+
+1. 目前这个插件的编译启动环境只能是DEBUG
+    
+    From now on this plugin can only make of DEBUG.
