@@ -64,6 +64,8 @@ namespace graphene { namespace track_account_plugin {
     private:
         // 事件注册句柄
         boost::signals2::connection monitor_signed_block_handler;
+        
+        bool track_all_relationship = false;
         // 查找账户名
         vector<string> tracked_account_names;
         // 查找资产信息
@@ -75,6 +77,8 @@ namespace graphene { namespace track_account_plugin {
         void track_account_and_write_to_file(account_object account,fc::time_point track_block_time);
         
         void track_call_orders_and_write_to_file(asset_object asset,fc::time_point track_block_time);
+        
+        void track_account_creater_register(fc::time_point track_block_time);
         
         // 生成区块事件回调函数
         void monitor_signed_block( const graphene::chain::signed_block& b);

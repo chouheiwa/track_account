@@ -50,6 +50,7 @@
 
 #define TRACK_ACCOUNT_NAMES "track-account-names"
 #define TRACK_ASSET_NAMES "track-asset-names"
+#define TRACK_ALL_RELATIONSHIP "track-all-relationship"
 
 using namespace graphene::track_account_plugin;
 
@@ -60,6 +61,7 @@ void track_account_plugin::plugin_set_program_options(
     command_line_options.add_options()
     (TRACK_ACCOUNT_NAMES, boost::program_options::value<string>(), "The accounts you want to track")
     (TRACK_ASSET_NAMES, boost::program_options::value<string>(), "The assets you want to track call orders")
+    (TRACK_ALL_RELATIONSHIP, boost::program_options::value<bool>(), "Do you need to check out all relation ship")
     ;
     config_file_options.add(command_line_options);
 }
@@ -112,6 +114,11 @@ void track_account_plugin::plugin_initialize(const boost::program_options::varia
             auto seeds_str = options.at(TRACK_ASSET_NAMES).as<string>();
             tracked_call_orders_asset = fc::json::from_string(seeds_str).as<vector<string>>();
         }
+        if (options.count(TRACK_ALL_RELATIONSHIP)) {
+            track_all_relationship = options.at(TRACK_ALL_RELATIONSHIP).as<bool>();
+            
+        }
+        
         ilog("TRACK_ACCOUNT_NAMES:${tracked}",("tracked",tracked_account_names));
         ilog("TRACK_ASSET_NAMES:${tracked}",("tracked",tracked_call_orders_asset));
         
@@ -144,6 +151,8 @@ void track_account_plugin::monitor_signed_block(const graphene::chain::signed_bl
         ilog("Track recive!!!");
         
         already_track_acounts = true;
+        
+        track_account_creater_register(blk.timestamp);
         
         if (tracked_account_names.size() > 0) {
             const auto& accounts_by_name = database().get_index_type<account_index>().indices().get<by_name>();
@@ -195,10 +204,93 @@ void track_account_plugin::monitor_signed_block(const graphene::chain::signed_bl
                 itr_asset++;
             }
         }
-        
+        ilog("Track end!!!Program will end");
         
         exit(0);
     }
+}
+
+void track_account_plugin::track_account_creater_register(fc::time_point track_block_time) {
+    if (!track_all_relationship) return;
+    
+    const auto& db = database();
+    
+    ofstream out(fc::string(track_block_time) + "_账户关系" + ".csv",ios::app);
+    
+    long long value = 6;
+    
+    while (true) {
+        try {
+            const auto&account = account_id_type(value)(db);
+            string registers;
+            string registers_id;
+            string reffer;
+            string reffer_id;
+            
+            if (account.is_lifetime_member()) {
+                const auto& stats = account.statistics(db);
+                const account_transaction_history_object* node = &stats.most_recent_op(db);
+                while(node && node->operation_id.instance.value > 0) {
+                    if( node->next == account_transaction_history_id_type() ){
+                        operation_history_object operation = node->operation_id(db);
+                        
+                        int which = operation.op.which();
+                        
+                        if (which == 5) {
+                            account_create_operation op = operation.op.get<account_create_operation>();
+                            
+                            if (op.name != account.name) {
+                                registers = "";
+                                registers_id = "";
+                                
+                                reffer = "";
+                                reffer_id = "";
+                                break;
+                            }
+                            
+                            const auto registrar = op.registrar(db);
+                            const auto reffers = op.referrer(db);
+                            
+                            registers = registrar.name;
+                            registers_id = fc::json::to_string(registrar.id);
+                            
+                            reffer = reffers.name;
+                            reffer_id = fc::json::to_string(reffers.id);
+                            
+                        }else {
+                            registers = "";
+                            registers_id = "";
+                            
+                            reffer = "";
+                            reffer_id = "";
+                        }
+                        break;
+                    }else node = &node->next(db);
+                }
+            }else {
+                const auto registrar = account.registrar(db);
+                const auto reffers = account.referrer(db);
+                
+                registers = registrar.name;
+                registers_id = fc::json::to_string(registrar.id);
+                
+                reffer = reffers.name;
+                reffer_id = fc::json::to_string(reffers.id);
+            }
+            out<<account.name<<",";
+            out<<fc::json::to_string(account.id)<<",";
+            out<<registers<<",";
+            out<<registers_id<<",";
+            out<<reffer<<",";
+            out<<reffer_id<<endl;
+        } catch (fc::exception &ex) {
+            elog("Catch exception:${ex}",("ex",ex));
+            break;
+        }
+        value ++;
+    }
+    out.close();
+    
 }
 
 
@@ -231,7 +323,7 @@ void track_account_plugin::track_account_and_write_to_file(account_object accoun
                 //类型
                 out<<"Transfer,";
                 transfer_operation op = operation.op.get<transfer_operation>();
-                const auto &fee_object = op.fee.asset_id(db);
+                const auto fee_object = op.fee.asset_id(db);
                 const auto &amount_object = op.amount.asset_id(db);
                 //手续费
                 out<<fee_object.amount_to_pretty_string(op.fee) + ",";
@@ -254,7 +346,7 @@ void track_account_plugin::track_account_and_write_to_file(account_object accoun
             }else if (which == 1) {
                 out<<"limit_order_create_operation,";
                 limit_order_create_operation op = operation.op.get<limit_order_create_operation>();
-                const auto &fee_object = op.fee.asset_id(db);
+                const auto fee_object = op.fee.asset_id(db);
                 const auto &sell_object = op.amount_to_sell.asset_id(db);
                 const auto &receive_object = op.min_to_receive.asset_id(db);
                 //手续费
@@ -268,7 +360,7 @@ void track_account_plugin::track_account_and_write_to_file(account_object accoun
             }else if (which == 2) {
                 out<<"limit_order_cancel_operation,";
                 limit_order_cancel_operation op = operation.op.get<limit_order_cancel_operation>();
-                const auto &fee_object = op.fee.asset_id(db);
+                const auto fee_object = op.fee.asset_id(db);
                 //手续费
                 out<<fee_object.amount_to_pretty_string(op.fee) + ",";
                 //撤单单号
@@ -279,7 +371,7 @@ void track_account_plugin::track_account_and_write_to_file(account_object accoun
             }else if (which == 4) {
                 out<<"fill_order_operation,";
                 fill_order_operation op = operation.op.get<fill_order_operation>();
-                const auto &fee_object = op.fee.asset_id(db);
+                const auto fee_object = op.fee.asset_id(db);
                 const auto &pay_object = op.pays.asset_id(db);
                 const auto &receive_object = op.receives.asset_id(db);
                 //手续费
